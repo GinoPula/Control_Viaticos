@@ -191,6 +191,11 @@ function currency(n){
 function todayISO(){
   return new Date().toISOString().slice(0,10);
 }
+function formatFechaCorta(isoDate){
+  if (!isoDate) return "";
+  const [y, m, d] = isoDate.split("-");
+  return `${d}/${m}/${y}`;
+}
 function uid(){
   return Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 }
@@ -331,8 +336,7 @@ function ComisionForm({ comision, setComision }){
   );
 }
 
-function NuevoGastoForm({ onAdd }){
-  const [fecha, setFecha] = useState(todayISO());
+function NuevoGastoForm({ onAdd, fecha, setFecha }){
   const [tipoSustento, setTipoSustento] = useState("con");
   const [categoria, setCategoria] = useState("desayuno");
   const [monto, setMonto] = useState("");
@@ -383,6 +387,7 @@ function NuevoGastoForm({ onAdd }){
           <label className="text-[11px] text-slate-600 block mb-1">Fecha del Gasto</label>
           <input type="date" className="w-full rounded-lg px-2.5 py-1.5 text-xs"
             value={fecha} onChange={e => setFecha(e.target.value)} />
+          <p className="text-[10px] text-slate-500 mt-1">Los indicadores de la derecha y el resumen diario corresponden a esta fecha.</p>
         </div>
         <div>
           <label className="text-[11px] text-slate-600 block mb-1">Tipo de Sustento</label>
@@ -491,14 +496,14 @@ function ProgressBar({ label, value, max }){
   );
 }
 
-function IndicadoresPanel({ gastosHoy, totalHoy, totalDJHoy }){
+function IndicadoresPanel({ gastosHoy, totalHoy, totalDJHoy, fecha }){
   const excedeTotal = totalHoy > LIMITE_DIARIO;
   const excedeDJ = totalDJHoy > LIMITE_DJ;
   const hayAlerta = excedeTotal || excedeDJ;
 
   return (
     <div className="glass rounded-2xl p-5 relative">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-1">
         <h2 className="text-xs font-bold text-red-700 uppercase tracking-wide">Indicadores en Tiempo Real</h2>
         {hayAlerta && (
           <div className="alert-circle" title="Límite superado">
@@ -506,6 +511,9 @@ function IndicadoresPanel({ gastosHoy, totalHoy, totalDJHoy }){
           </div>
         )}
       </div>
+      {fecha && (
+        <p className="text-[10px] text-slate-500 mb-3">Día: <span className="font-semibold text-slate-700">{formatFechaCorta(fecha)}</span></p>
+      )}
 
       {hayAlerta && (
         <div className="glass-panel-alert rounded-xl p-3 mb-4">
@@ -847,9 +855,9 @@ function App(){
     nombre: "", dni: "", area: "", fechaInicio: todayISO(), fechaFin: todayISO()
   });
   const [gastos, setGastos] = useState([]);
+  const [diaSeleccionado, setDiaSeleccionado] = useState(todayISO());
 
-  const hoy = todayISO();
-  const gastosHoy = useMemo(() => gastos.filter(g => g.fecha === hoy), [gastos, hoy]);
+  const gastosHoy = useMemo(() => gastos.filter(g => g.fecha === diaSeleccionado), [gastos, diaSeleccionado]);
   const totalHoy = useMemo(() => gastosHoy.reduce((s,g) => s + g.monto, 0), [gastosHoy]);
   const totalDJHoy = useMemo(() => gastosHoy.filter(g => g.tipoSustento === "sin").reduce((s,g) => s + g.monto, 0), [gastosHoy]);
 
@@ -877,14 +885,19 @@ function App(){
 
           {activeTab === "nuevo" && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-              <NuevoGastoForm onAdd={addGasto} />
-              <IndicadoresPanel gastosHoy={gastosHoy} totalHoy={totalHoy} totalDJHoy={totalDJHoy} />
+              <NuevoGastoForm onAdd={addGasto} fecha={diaSeleccionado} setFecha={setDiaSeleccionado} />
+              <IndicadoresPanel gastosHoy={gastosHoy} totalHoy={totalHoy} totalDJHoy={totalDJHoy} fecha={diaSeleccionado} />
             </div>
           )}
 
           {activeTab === "resumen" && (
             <div>
-              <IndicadoresPanel gastosHoy={gastosHoy} totalHoy={totalHoy} totalDJHoy={totalDJHoy} />
+              <div className="glass-soft rounded-xl p-3 mb-3 flex items-center gap-3 flex-wrap">
+                <label className="text-[11px] text-slate-600 font-semibold">Ver día:</label>
+                <input type="date" className="rounded-lg px-2.5 py-1.5 text-xs"
+                  value={diaSeleccionado} onChange={e => setDiaSeleccionado(e.target.value)} />
+              </div>
+              <IndicadoresPanel gastosHoy={gastosHoy} totalHoy={totalHoy} totalDJHoy={totalDJHoy} fecha={diaSeleccionado} />
               <TablaGastos gastos={gastosHoy} onDelete={deleteGasto} />
             </div>
           )}

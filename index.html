@@ -23,7 +23,7 @@
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
     --rojo: #D91A2A;
@@ -337,7 +337,9 @@ function NuevoGastoForm({ onAdd }){
   const [categoria, setCategoria] = useState("desayuno");
   const [monto, setMonto] = useState("");
   const [tipoDocumento, setTipoDocumento] = useState("Boleta de Venta");
+  const [numeroDocumento, setNumeroDocumento] = useState("");
   const [razonSocial, setRazonSocial] = useState("");
+  const [conceptoGastoDJ, setConceptoGastoDJ] = useState("");
   const [detalle, setDetalle] = useState("");
   const [showMoreCat, setShowMoreCat] = useState(false);
 
@@ -360,11 +362,15 @@ function NuevoGastoForm({ onAdd }){
       categoria,
       monto: montoNum,
       tipoDocumento: tipoSustento === "con" ? tipoDocumento : "Declaración Jurada",
+      numeroDocumento: tipoSustento === "con" ? numeroDocumento : "",
       razonSocial: tipoSustento === "con" ? razonSocial : (razonSocial || "—"),
+      conceptoGastoDJ: tipoSustento === "sin" ? conceptoGastoDJ : "",
       detalle,
     });
     setMonto("");
+    setNumeroDocumento("");
     setRazonSocial("");
+    setConceptoGastoDJ("");
     setDetalle("");
   };
 
@@ -433,9 +439,9 @@ function NuevoGastoForm({ onAdd }){
           </div>
         ) : (
           <div>
-            <label className="text-[11px] text-slate-600 block mb-1">Concepto (DJ)</label>
+            <label className="text-[11px] text-slate-600 block mb-1">Concepto de Gasto (DJ)</label>
             <input type="text" className="w-full rounded-lg px-2.5 py-1.5 text-xs" placeholder="Ej. Movilidad"
-              value={detalle} onChange={e => setDetalle(e.target.value)} />
+              value={conceptoGastoDJ} onChange={e => setConceptoGastoDJ(e.target.value)} />
           </div>
         )}
         <div>
@@ -444,6 +450,14 @@ function NuevoGastoForm({ onAdd }){
             value={razonSocial} onChange={e => setRazonSocial(e.target.value)} disabled={tipoSustento === "sin"} />
         </div>
       </div>
+
+      {tipoSustento === "con" && (
+        <div className="mb-3">
+          <label className="text-[11px] text-slate-600 block mb-1">N° Documento</label>
+          <input type="text" className="w-full rounded-lg px-2.5 py-1.5 text-xs" placeholder="Ej. B001-00123"
+            value={numeroDocumento} onChange={e => setNumeroDocumento(e.target.value)} />
+        </div>
+      )}
 
       <div className="mb-4">
         <label className="text-[11px] text-slate-600 block mb-1">Detalles (opcional)</label>
@@ -584,43 +598,234 @@ function TablaGastos({ gastos, onDelete }){
   );
 }
 
-function exportarExcel(gastos, comision){
-  if (!gastos.length) return;
-  const wb = XLSX.utils.book_new();
+// ==== Exportación a Excel usando las plantillas oficiales (Anexo 03 / Anexo 04) ====
+// En vez de generar un Excel desde cero, se edita directamente el XML interno de las
+// plantillas .xlsx originales (son archivos ZIP) para preservar el logo, bordes,
+// colores y textos legales exactos, escribiendo solo los valores en las celdas de datos.
 
-  const conComprobante = gastos.filter(g => g.tipoSustento === "con");
-  const anexo03Data = [
-    ["ANEXO 03 - RENDICIÓN DE GASTOS CON COMPROBANTE DE PAGO"],
-    ["Comisionado:", comision.nombre, "DNI:", comision.dni],
-    ["Área:", comision.area, "Periodo:", `${comision.fechaInicio} al ${comision.fechaFin}`],
-    [],
-    ["Fecha", "Documento", "N°", "Razón Social / Nombre", "Concepto", "Importe (S/)"],
-    ...conComprobante.map((g, i) => [g.fecha, g.tipoDocumento, i + 1, g.razonSocial, g.detalle, g.monto]),
-    [],
-    ["", "", "", "", "TOTAL", conComprobante.reduce((s, g) => s + g.monto, 0)],
-  ];
-  const ws03 = XLSX.utils.aoa_to_sheet(anexo03Data);
-  ws03["!cols"] = [{wch:12},{wch:18},{wch:6},{wch:28},{wch:32},{wch:14}];
-  XLSX.utils.book_append_sheet(wb, ws03, "Anexo 03");
+const SS_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+const XML_NS = "http://www.w3.org/XML/1998/namespace";
+const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
 
-  const sinComprobante = gastos.filter(g => g.tipoSustento === "sin");
-  const anexo04Data = [
-    ["ANEXO 04 - DECLARACIÓN JURADA DE GASTOS SIN COMPROBANTE DE PAGO"],
-    ["Declaro bajo juramento que los gastos detallados a continuación fueron realizados en el marco de la comisión de servicios autorizada, no contando con comprobante de pago por la naturaleza de los mismos."],
-    ["Comisionado:", comision.nombre, "DNI:", comision.dni],
-    ["Área:", comision.area, "Periodo:", `${comision.fechaInicio} al ${comision.fechaFin}`],
-    [],
-    ["Fecha", "Concepto de Gasto", "Concepto", "Importe (S/)"],
-    ...sinComprobante.map(g => [g.fecha, g.detalle || g.razonSocial, g.detalle, g.monto]),
-    [],
-    ["", "", "TOTAL", sinComprobante.reduce((s, g) => s + g.monto, 0)],
-  ];
-  const ws04 = XLSX.utils.aoa_to_sheet(anexo04Data);
-  ws04["!cols"] = [{wch:12},{wch:28},{wch:32},{wch:14}];
-  XLSX.utils.book_append_sheet(wb, ws04, "Anexo 04");
+function dateToExcelSerial(isoDate){
+  if (!isoDate) return "";
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const ms = Date.UTC(y, m - 1, d);
+  return Math.round((ms - EXCEL_EPOCH_MS) / 86400000);
+}
 
-  const fileName = `Rendicion_Viaticos_${(comision.nombre || "Comisionado").replace(/\s+/g,"_")}_${todayISO()}.xlsx`;
-  XLSX.writeFile(wb, fileName);
+function getCell(doc, ref){
+  return doc.querySelector(`c[r="${ref}"]`);
+}
+
+function setCellNumber(doc, ref, value){
+  const c = getCell(doc, ref);
+  if (!c) return;
+  c.removeAttribute("t");
+  const oldIs = c.getElementsByTagName("is")[0];
+  if (oldIs) c.removeChild(oldIs);
+  let v = c.getElementsByTagName("v")[0];
+  if (!v) { v = doc.createElementNS(SS_NS, "v"); c.appendChild(v); }
+  v.textContent = String(value);
+}
+
+function setCellText(doc, ref, text){
+  const c = getCell(doc, ref);
+  if (!c) return;
+  const oldV = c.getElementsByTagName("v")[0];
+  if (oldV) c.removeChild(oldV);
+  c.setAttribute("t", "inlineStr");
+  let is = c.getElementsByTagName("is")[0];
+  if (!is) { is = doc.createElementNS(SS_NS, "is"); c.appendChild(is); }
+  while (is.firstChild) is.removeChild(is.firstChild);
+  const t = doc.createElementNS(SS_NS, "t");
+  t.setAttributeNS(XML_NS, "xml:space", "preserve");
+  t.textContent = text == null ? "" : String(text);
+  is.appendChild(t);
+}
+
+function shiftRefRowTokens(str, thresholdRow, shiftBy){
+  return str.replace(/([A-Z]{1,3})(\d+)/g, (m, col, row) => {
+    const r = parseInt(row, 10);
+    return col + (r >= thresholdRow ? (r + shiftBy) : r);
+  });
+}
+
+function getSheetDataEl(doc){
+  return doc.getElementsByTagName("sheetData")[0];
+}
+
+function getRowEl(sheetDataEl, rowNum){
+  return sheetDataEl.querySelector(`row[r="${rowNum}"]`);
+}
+
+// Inserta `count` filas clonando el estilo de `templateRowNum`, justo después de
+// `afterRow`, desplazando hacia abajo todo lo que esté debajo (incluida la fila TOTAL).
+function insertExtraRows(sheetDataEl, templateRowNum, afterRow, count){
+  if (count <= 0) return;
+  const rowsBelow = Array.from(sheetDataEl.querySelectorAll("row"))
+    .filter(r => parseInt(r.getAttribute("r"), 10) > afterRow)
+    .sort((a, b) => parseInt(b.getAttribute("r"), 10) - parseInt(a.getAttribute("r"), 10));
+  rowsBelow.forEach(row => {
+    const newR = parseInt(row.getAttribute("r"), 10) + count;
+    row.setAttribute("r", String(newR));
+    Array.from(row.getElementsByTagName("c")).forEach(c => {
+      const col = c.getAttribute("r").match(/^[A-Z]+/)[0];
+      c.setAttribute("r", col + newR);
+    });
+  });
+
+  const templateRow = getRowEl(sheetDataEl, templateRowNum);
+  let anchor = getRowEl(sheetDataEl, afterRow);
+  for (let i = 0; i < count; i++){
+    const newRowNum = afterRow + 1 + i;
+    const clone = templateRow.cloneNode(true);
+    clone.setAttribute("r", String(newRowNum));
+    Array.from(clone.getElementsByTagName("c")).forEach(c => {
+      const col = c.getAttribute("r").match(/^[A-Z]+/)[0];
+      c.setAttribute("r", col + newRowNum);
+      const v = c.getElementsByTagName("v")[0]; if (v) c.removeChild(v);
+      const is = c.getElementsByTagName("is")[0]; if (is) c.removeChild(is);
+      c.removeAttribute("t");
+    });
+    anchor.parentNode.insertBefore(clone, anchor.nextSibling);
+    anchor = clone;
+  }
+
+  const ownerDoc = sheetDataEl.ownerDocument;
+  Array.from(ownerDoc.getElementsByTagName("mergeCell")).forEach(mc => {
+    mc.setAttribute("ref", shiftRefRowTokens(mc.getAttribute("ref"), afterRow + 1, count));
+  });
+  const dim = ownerDoc.getElementsByTagName("dimension")[0];
+  if (dim) dim.setAttribute("ref", shiftRefRowTokens(dim.getAttribute("ref"), afterRow + 1, count));
+}
+
+async function buildWorkbookFromTemplate(templateUrl, mutateFn){
+  const res = await fetch(templateUrl);
+  if (!res.ok) throw new Error("No se encontró la plantilla " + templateUrl + " (colócala junto a index.html)");
+  const buf = await res.arrayBuffer();
+  const zip = await JSZip.loadAsync(buf);
+
+  const sheetPath = "xl/worksheets/sheet1.xml";
+  const sheetXmlText = await zip.file(sheetPath).async("text");
+  const doc = new DOMParser().parseFromString(sheetXmlText, "application/xml");
+
+  mutateFn(doc);
+
+  zip.file(sheetPath, new XMLSerializer().serializeToString(doc));
+
+  // El calcChain queda obsoleto si se insertaron filas; se quita y se fuerza recálculo.
+  if (zip.file("xl/calcChain.xml")){
+    zip.remove("xl/calcChain.xml");
+    const ctPath = "[Content_Types].xml";
+    let ct = await zip.file(ctPath).async("text");
+    zip.file(ctPath, ct.replace(/<Override[^>]*calcChain\.xml[^>]*\/>/, ""));
+    const relsPath = "xl/_rels/workbook.xml.rels";
+    let rels = await zip.file(relsPath).async("text");
+    zip.file(relsPath, rels.replace(/<Relationship[^>]*calcChain\.xml[^>]*\/>/, ""));
+  }
+  const wbPath = "xl/workbook.xml";
+  let wbXml = await zip.file(wbPath).async("text");
+  if (wbXml.includes("<calcPr") && !wbXml.includes("fullCalcOnLoad")){
+    wbXml = wbXml.replace(/<calcPr([^/]*)\/>/, (m, attrs) => `<calcPr${attrs} fullCalcOnLoad="1"/>`);
+    zip.file(wbPath, wbXml);
+  }
+
+  return zip.generateAsync({
+    type: "blob",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}
+
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+async function exportAnexo03(gastos, comision){
+  const items = gastos.filter(g => g.tipoSustento === "con");
+  if (!items.length) return;
+  const CAPACITY = 15; // filas 11 a 25 en la plantilla oficial
+  const extra = Math.max(0, items.length - CAPACITY);
+
+  const blob = await buildWorkbookFromTemplate("Anexo_03_-_Rendicion_gastos_con_comprobantes.xlsx", (doc) => {
+    const sheetDataEl = getSheetDataEl(doc);
+    if (extra > 0) insertExtraRows(sheetDataEl, 25, 25, extra);
+
+    items.forEach((g, i) => {
+      const row = 11 + i;
+      setCellNumber(doc, `A${row}`, dateToExcelSerial(g.fecha));
+      setCellText(doc, `B${row}`, g.tipoDocumento || "");
+      setCellText(doc, `C${row}`, g.numeroDocumento || "");
+      setCellText(doc, `D${row}`, g.razonSocial || "");
+      setCellText(doc, `E${row}`, g.detalle || "");
+      setCellNumber(doc, `F${row}`, g.monto);
+    });
+
+    const totalRow = 26 + extra;
+    setCellNumber(doc, `F${totalRow}`, items.reduce((s, g) => s + g.monto, 0));
+    const f = getCell(doc, `F${totalRow}`).getElementsByTagName("f")[0];
+    if (f) f.textContent = `SUM(F11:F${25 + extra})`;
+  });
+
+  downloadBlob(blob, `Anexo03_${(comision.nombre || "Comisionado").replace(/\s+/g, "_")}_${todayISO()}.xlsx`);
+}
+
+async function exportAnexo04(gastos, comision){
+  const items = gastos.filter(g => g.tipoSustento === "sin");
+  if (!items.length) return;
+  const CAPACITY = 9; // filas 13 a 21 en la plantilla oficial
+  const extra = Math.max(0, items.length - CAPACITY);
+
+  const blob = await buildWorkbookFromTemplate("Anexo_04_-_Rendicion_gastos_sin_comprobantes.xlsx", (doc) => {
+    const sheetDataEl = getSheetDataEl(doc);
+    if (extra > 0) insertExtraRows(sheetDataEl, 21, 21, extra);
+
+    items.forEach((g, i) => {
+      const row = 13 + i;
+      setCellNumber(doc, `A${row}`, dateToExcelSerial(g.fecha));
+      setCellText(doc, `B${row}`, g.conceptoGastoDJ || "");
+      setCellText(doc, `C${row}`, g.detalle || "");
+      setCellNumber(doc, `D${row}`, g.monto);
+    });
+
+    const totalRow = 22 + extra;
+    setCellNumber(doc, `D${totalRow}`, items.reduce((s, g) => s + g.monto, 0));
+    const f = getCell(doc, `D${totalRow}`).getElementsByTagName("f")[0];
+    if (f) f.textContent = `SUM(D13:D${21 + extra})`;
+
+    if (comision.nombre || comision.dni){
+      const nombre = comision.nombre || "____________________";
+      const dni = comision.dni || "________";
+      setCellText(doc, "A9",
+        `Yo, ${nombre}, identificado con DNI Nº ${dni}, prestando servicio en el PNC, con domicilio en ____________________, declaro bajo juramento haber efectuado gastos en mi comisión de servicios, los cuales me fueron imposible obtener comprobantes de pago que sustentes los gastos, el cual se detalla en el siguiente cuadro:`
+      );
+    }
+  });
+
+  downloadBlob(blob, `Anexo04_${(comision.nombre || "Comisionado").replace(/\s+/g, "_")}_${todayISO()}.xlsx`);
+}
+
+async function exportarExcel(gastos, comision){
+  const tieneCon = gastos.some(g => g.tipoSustento === "con");
+  const tieneSin = gastos.some(g => g.tipoSustento === "sin");
+  if (!tieneCon && !tieneSin) return;
+  try {
+    if (tieneCon) await exportAnexo03(gastos, comision);
+    if (tieneSin){
+      if (tieneCon) await new Promise(r => setTimeout(r, 500));
+      await exportAnexo04(gastos, comision);
+    }
+  } catch (err){
+    console.error(err);
+    alert("No se pudo generar el Excel con la plantilla oficial:\n" + err.message);
+  }
 }
 
 function ReportesResumen({ gastos }){
@@ -668,6 +873,9 @@ function App(){
         </div>
 
         <div className="glass rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 md:p-7">
+          <p className="text-[10px] sm:text-[11px] text-slate-600 mb-1.5">
+            <span className="font-bold">Autor:</span> <span className="font-bold">Administrativo Luis Alfredo Vente Tello</span>
+          </p>
           <h1 className="text-base sm:text-lg md:text-xl font-bold text-slate-800 tracking-wide mb-4 leading-snug">
             REGISTRO Y RENDICIÓN DE VIÁTICOS - COMISIÓN DE SERVICIO - (Administración)
           </h1>

@@ -1,9 +1,11 @@
-const CACHE_NAME = "viaticos-mvcs-v1";
+const CACHE_NAME = "viaticos-mvcs-v2";
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./images.jpg",
+  "./Anexo_03_-_Rendicion_gastos_con_comprobantes.xlsx",
+  "./Anexo_04_-_Rendicion_gastos_sin_comprobantes.xlsx",
 ];
 
 self.addEventListener("install", (event) => {

@@ -311,7 +311,7 @@ function ComisionForm({ comision, setComision }){
         </div>
         <div>
           <label className="text-[11px] text-slate-600 block mb-1">Área / Dependencia</label>
-          <input type="text" className="w-full rounded-lg px-2.5 py-1.5 text-xs" placeholder="Ej. OGA - Logística"
+          <input type="text" className="w-full rounded-lg px-2.5 py-1.5 text-xs" placeholder="Ej. PNC - Administración"
             value={comision.area} onChange={e => setComision({...comision, area: e.target.value})} />
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -491,7 +491,7 @@ function ProgressBar({ label, value, max }){
   );
 }
 
-function IndicadoresPanel({ gastosHoy, totalHoy, totalDJHoy, gastos, comision }){
+function IndicadoresPanel({ gastosHoy, totalHoy, totalDJHoy }){
   const excedeTotal = totalHoy > LIMITE_DIARIO;
   const excedeDJ = totalDJHoy > LIMITE_DJ;
   const hayAlerta = excedeTotal || excedeDJ;
@@ -537,14 +537,6 @@ function IndicadoresPanel({ gastosHoy, totalHoy, totalDJHoy, gastos, comision })
           </div>
         </div>
       </div>
-
-      <button
-        onClick={() => exportarExcel(gastos, comision)}
-        disabled={gastos.length === 0}
-        className="w-full btn-export disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl text-xs tracking-wide transition"
-      >
-        📊 EXPORTAR EXCEL (Anexo 03 / 04)
-      </button>
     </div>
   );
 }
@@ -886,13 +878,13 @@ function App(){
           {activeTab === "nuevo" && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
               <NuevoGastoForm onAdd={addGasto} />
-              <IndicadoresPanel gastosHoy={gastosHoy} totalHoy={totalHoy} totalDJHoy={totalDJHoy} gastos={gastos} comision={comision} />
+              <IndicadoresPanel gastosHoy={gastosHoy} totalHoy={totalHoy} totalDJHoy={totalDJHoy} />
             </div>
           )}
 
           {activeTab === "resumen" && (
             <div>
-              <IndicadoresPanel gastosHoy={gastosHoy} totalHoy={totalHoy} totalDJHoy={totalDJHoy} gastos={gastos} comision={comision} />
+              <IndicadoresPanel gastosHoy={gastosHoy} totalHoy={totalHoy} totalDJHoy={totalDJHoy} />
               <TablaGastos gastos={gastosHoy} onDelete={deleteGasto} />
             </div>
           )}
